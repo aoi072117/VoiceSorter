@@ -1,0 +1,863 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VoiceSorter · 声纹分拣</title>
+<style>
+  :root{
+    --bg:#14161a; --panel:#1c1f25; --line:#2b3038; --text:#e6e8ec; --dim:#9aa3af;
+    --accent:#4c8dff; --ok:#3fb950; --warn:#d29922; --danger:#f85149;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.6 system-ui,"Microsoft YaHei",sans-serif}
+  header{display:flex;align-items:center;gap:16px;padding:14px 22px;
+         border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:20}
+  header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px}
+  .steps{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+  .step{padding:5px 12px;border-radius:14px;border:1px solid var(--line);
+        color:var(--dim);cursor:pointer;font-size:12px;background:transparent}
+  .step.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .step.done{color:var(--ok);border-color:var(--ok)}
+  main{max-width:1180px;margin:0 auto;padding:22px}
+  section{display:none}
+  section.show{display:block}
+  h2{font-size:16px;margin:0 0 4px}
+  p.sub{color:var(--dim);margin:0 0 18px;font-size:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+  label.f{display:block;font-size:12px;color:var(--dim);margin:10px 0 4px}
+  input[type=text],input[type=number],select{
+    width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);
+    background:#0f1115;color:var(--text);font-size:13px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row>*{flex:1;min-width:180px}
+  button{padding:8px 16px;border-radius:8px;border:1px solid var(--line);
+         background:#232830;color:var(--text);cursor:pointer;font-size:13px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.danger{border-color:var(--danger);color:var(--danger)}
+  button.danger:hover{background:var(--danger);color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .bar{height:6px;background:#0f1115;border-radius:3px;overflow:hidden;margin:10px 0}
+  .bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+  .log{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--dim);
+       white-space:pre-wrap;max-height:120px;overflow:auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}
+  .clip{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .clip.cur{outline:2px solid var(--accent)}
+  .clip .name{font-size:12px;color:var(--dim);word-break:break-all;margin-bottom:6px}
+  .clip .tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;
+             background:#232830;margin-right:6px}
+  .clip audio{width:100%;height:34px;margin:6px 0}
+  .btns{display:flex;gap:6px;flex-wrap:wrap}
+  .btns button{padding:4px 9px;font-size:12px}
+  .clusters{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+  .cl{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .cl h4{margin:0 0 8px;font-size:13px;font-weight:600}
+  .cl .meta{font-size:12px;color:var(--dim);margin-bottom:8px}
+  .cl audio{width:100%;height:32px;margin:3px 0}
+  .panel{background:#241f14;border:1px solid var(--warn);border-radius:10px;padding:14px;margin-bottom:14px;display:none}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  .chip{padding:4px 12px;border-radius:12px;background:#232830;border:1px solid var(--line);
+        cursor:pointer;font-size:12px;color:var(--dim)}
+  .chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .hintbar{position:sticky;bottom:0;background:var(--panel);border-top:1px solid var(--line);
+           padding:8px 22px;font-size:12px;color:var(--dim);margin-top:18px}
+  kbd{background:#232830;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:11px}
+  .stats{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--dim)}
+  .stats b{color:var(--text);font-weight:600}
+  /* 目录浏览器 */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal.show{display:flex}
+  .mbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;width:min(680px,92vw);
+        max-height:80vh;display:flex;flex-direction:column;overflow:hidden}
+  .mhead{padding:12px 16px;border-bottom:1px solid var(--line);font-size:13px;word-break:break-all}
+  .mlist{flex:1;overflow:auto;padding:6px}
+  .mrow{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px}
+  .mrow:hover{background:#232830}
+  .mrow .ico{color:var(--accent)}
+  .mfoot{display:flex;gap:8px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+  .mfoot span{color:var(--dim);font-size:12px;margin-right:auto}
+</style>
+</head>
+<body>
+<header>
+  <h1>VoiceSorter</h1>
+  <span id="projName" class="stats"></span>
+  <nav class="steps" id="steps"></nav>
+</header>
+
+<main>
+  <!-- 1 -->
+  <section id="s1" class="show">
+    <h2>① 选择目录</h2>
+    <p class="sub">音频所在目录，以及分类结果要输出到哪里。项目数据存在第三个路径。</p>
+    <div class="card">
+      <label class="f">音频目录</label>
+      <div class="row"><input type="text" id="inDir" placeholder="D:\我的音频"><button onclick="pick('inDir')">浏览</button></div>
+      <label class="f">导出目录</label>
+      <div class="row"><input type="text" id="outDir" placeholder="D:\分类结果"><button onclick="pick('outDir')">浏览</button></div>
+      <label class="f">项目数据目录（存缓存和设置）</label>
+      <div class="row"><input type="text" id="prjDir" placeholder="D:\我的音频\.voicesorter"><button onclick="pick('prjDir')">浏览</button></div>
+      <div style="margin-top:16px" class="btns"><button class="primary" onclick="createProject()">创建项目</button><button onclick="openProject()">打开已有项目</button></div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="s2">
+    <h2>② 抽样聚类</h2>
+    <p class="sub">先抽一部分音频，自动归成若干簇。你只需要给需要的簇起名。</p>
+    <div class="card">
+      <div class="row">
+        <div><label class="f">抽样条数</label><input type="number" id="sampleSize" value="500" min="30"></div>
+        <div><label class="f">簇数量（0 = 自动估计）</label><input type="number" id="kClusters" value="0" min="0"></div>
+        <div><label class="f" id="workersLabel">并发进程数</label><input type="number" id="workers2" value="4" min="1" max="16"></div>
+        <div style="display:flex;align-items:flex-end"><button class="primary" id="btnCluster" onclick="runCluster()">开始处理</button></div>
+      </div>
+      <p class="sub" style="margin:6px 0 0">这一步会自动完成：扫描文件 → 提取声纹 → 聚类。第一次会慢一些，之后会复用缓存。</p>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--dim)">
+        <input type="checkbox" id="cool2" style="width:auto"> 低温模式（并发降到 2，每批之间歇一下，笔记本不烫）
+      </label>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+        <div class="stats" id="libStatus"></div>
+        <div class="btns" style="margin-top:8px">
+          <button onclick="exportLib()">导出角色库</button>
+          <button onclick="importLib()">导入角色库</button>
+        </div>
+        <p class="sub" style="margin:8px 0 0">导入别人训练好的角色库，可以跳过聚类直接分类。角色库只是"标准答案"，还得拿本项目的音频去比对，所以要先生成声纹。</p>
+        <p class="sub" id="libHint" style="margin:8px 0 0;color:var(--warn);display:none"></p>
+      </div>
+      <div class="bar"><i id="bar2"></i></div>
+      <div class="log" id="log2"></div>
+    </div>
+    <div class="card" id="clusterBox" style="display:none">
+      <h3 style="font-size:14px;margin:0 0 6px">给需要的簇起名</h3>
+      <p class="sub" style="margin-bottom:12px">填名字的会被导出；留空的归入「其他」，不导出。</p>
+      <div class="row" style="margin-bottom:12px">
+        <div><label class="f">批量命名</label><input type="text" id="batchName" placeholder="留空则清空所有名字"></div>
+        <div style="display:flex;align-items:flex-end"><button onclick="batchRename()">应用到全部</button></div>
+      </div>
+      <div class="clusters" id="clusterList"></div>
+      <div style="margin-top:16px" class="btns">
+        <button class="primary" onclick="buildLibrary()">建立角色库</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="s3">
+    <h2>③ 全量分类</h2>
+    <p class="sub">用角色库给全部音频分类。阈值越高越保守（宁可少要，不要混进别人的声音）。</p>
+    <div class="card">
+      <div class="row">
+        <div><label class="f">相似度阈值</label><input type="number" id="thr" step="0.01" value="0.65"></div>
+        <div><label class="f">与第二名最小差距</label><input type="number" id="mrg" step="0.01" value="0.03"></div>
+        <div><label class="f">最短时长（秒）</label><input type="number" id="minDur3" step="0.1" value="1.0" min="0"></div>
+        <div style="display:flex;align-items:flex-end"><button class="primary" onclick="runClassify()">开始分类</button></div>
+
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--dim)">
+        <input type="checkbox" id="loud3" style="width:auto" checked> 过滤异常响亮（尖叫、呼喊，响度高于 0.25 的丢弃）
+      </label>
+
+      <div class="bar"><i id="bar3"></i></div>
+      <div class="log" id="log3"></div>
+      <div class="stats" id="counts3" style="margin-top:12px"></div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section id="s4">
+    <h2>④ 人工校对</h2>
+    <p class="sub">听错的直接改判或删除。删除一条后，会自动找出同类的可疑条目。</p>
+    <div class="chips" id="filters4"></div>
+    <div class="card" style="padding:10px 14px">
+      <div class="row" style="align-items:center">
+        <div><label class="f">排序</label>
+          <select id="sort4" onchange="loadReview(true)">
+            <option value="score">分数从低到高（先看最可疑）</option>
+            <option value="score_desc">分数从高到低</option>
+          </select></div>
+        <div style="display:flex;align-items:flex-end;gap:8px">
+          <button onclick="loadReview(false)">加载更多</button>
+          <button class="primary" onclick="finishReview()">完成校对 → 导出</button>
+        </div>
+      </div>
+      <div class="row" style="align-items:center;margin-top:12px">
+        <div class="stats" id="progress4"></div>
+        <div class="stats" id="markStat"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button id="autoCalBtn4" onclick="calibrate()" disabled>自动校准</button>
+        </div>
+      </div>
+      <p class="sub" id="calibHint4" style="margin:6px 0 0"></p>
+    </div>
+    <div class="panel" id="cascadePanel">
+      <b>这些可能和刚才删的是同一类</b>
+      <div id="cascadeList" class="grid" style="margin:10px 0"></div>
+      <div class="btns"><button class="danger" onclick="blockAllCascade()">全部归入其他</button><button onclick="hideCascade()">关闭</button></div>
+    </div>
+    <div class="grid" id="reviewGrid"></div>
+  </section>
+
+  <!-- 5 -->
+  <section id="s5">
+    <h2>⑤ 导出</h2>
+    <p class="sub">按角色分文件夹输出，并生成清单 CSV。</p>
+    <div class="card">
+      <div class="row">
+        <div><label class="f">导出格式</label>
+          <select id="fmt5"><option value="wav">WAV（原始采样率）</option><option value="copy">复制原文件</option></select></div>
+        <div><label class="f">峰值归一化</label>
+          <select id="norm5"><option value="0">不处理（推荐）</option><option value="1">超过 0dB 时压到 -0.1dB</option></select></div>
+        <div style="display:flex;align-items:flex-end"><button class="primary" onclick="runExport()">开始导出</button></div>
+      </div>
+      <div class="bar"><i id="bar5"></i></div>
+      <div class="log" id="log5"></div>
+      <div class="stats" id="est5" style="margin:12px 0"></div>
+    </div>
+    <div class="card">
+      <h3 style="font-size:14px;margin:0 0 8px">清理</h3>
+      <p class="sub">删除中间文件可以省空间，但下次修改阈值要重新计算。</p>
+      <div class="btns">
+        <button onclick="clean(['others'])">删除「其他」文件夹</button>
+        <button onclick="clean(['cache'])">清理预览和样本（保留声纹）</button>
+        <button class="danger" onclick="clean(['all_cache'])">清理全部缓存（含声纹）</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="modal" id="recentModal">
+  <div class="mbox">
+    <div class="mhead">打开已有项目</div>
+    <div class="mlist" id="recentList"></div>
+    <div class="mfoot">
+      <span id="recentInfo"></span>
+      <button onclick="closeRecent()">取消</button>
+      <button onclick="browseProject()">从磁盘选择…</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="browser">
+  <div class="mbox">
+    <div class="mhead" id="brPath">此电脑</div>
+    <div class="mlist" id="brList"></div>
+    <div class="mfoot">
+      <span id="brInfo"></span>
+      <button onclick="closeBrowser()">取消</button>
+      <button class="primary" id="brChoose" onclick="chooseFolder()">选择此文件夹</button>
+    </div>
+  </div>
+</div>
+
+<div class="hintbar" id="hintbar">
+  快捷键：<kbd>空格</kbd>播放 · <kbd>1</kbd>~<kbd>9</kbd>改判 · <kbd>C</kbd>确认（播放即自动确认） · <kbd>0</kbd>归其他 · <kbd>D</kbd>删除 · <kbd>Z</kbd>撤销 · <kbd>←</kbd><kbd>→</kbd>切换
+</div>
+
+<script>
+const S = { state:null, clusters:null, review:[], cur:-1, filter:"", offset:0, cascade:[], played:new Set() };
+
+async function api(path, body){
+  const opts = (body === undefined)
+    ? {}
+    : {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)};
+  const r = await fetch(path, opts);
+  if(!r.ok){
+    let msg = r.status + " " + r.statusText;
+    try { const j = await r.json(); msg = j.detail ? JSON.stringify(j.detail) : msg; } catch(e){}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+function $(id){ return document.getElementById(id); }
+function fmtSize(n){ return (n/1024/1024/1024).toFixed(2)+" GB"; }
+
+/* ---------- 导航 ---------- */
+const STEPS = [["s1","① 目录"],["s2","② 聚类"],["s3","③ 分类"],["s4","④ 校对"],["s5","⑤ 导出"]];
+function renderSteps(){
+  const nav = $("steps"); nav.innerHTML="";
+  STEPS.forEach(([id,label])=>{
+    const b=document.createElement("button");
+    b.className="step"+(id===currentSection?" active":"");
+    b.textContent=label; b.onclick=()=>show(id);
+    nav.appendChild(b);
+  });
+}
+let currentSection="s1";
+function show(id){
+  currentSection=id;
+  document.querySelectorAll("section").forEach(s=>s.classList.toggle("show", s.id===id));
+  renderSteps();
+  if(id==="s3") refreshCalib();
+  if(id==="s4"){ ensureChars().then(()=>{ loadReview(true); refreshCalib(); }); }
+  if(id==="s5") estimate();
+  if(id==="s2"){ loadSystemInfo(); refreshLib(); if(S.state && S.state.stage!=="created") loadClusters(); }
+}
+
+/* ---------- 目录浏览器 ---------- */
+let brTarget = null, brPath = "";
+
+function pick(target){
+  brTarget = target;
+  openBrowser((document.getElementById(target).value || "").trim());
+}
+async function openBrowser(path){
+  document.getElementById("browser").classList.add("show");
+  try{
+    const r = await api("/api/browse?path=" + encodeURIComponent(path));
+    brPath = r.path;
+    $("brPath").textContent = r.path || "此电脑";
+    $("brInfo").textContent = r.audio ? `此层有 ${r.audio} 个音频文件` : "";
+    $("brChoose").disabled = !r.path;
+    const list = $("brList"); list.innerHTML = "";
+    if(r.parent !== undefined && r.parent !== null){
+      const up = document.createElement("div");
+      up.className = "mrow"; up.innerHTML = `<span class="ico">↑</span><span>上一级</span>`;
+      up.onclick = () => openBrowser(r.parent || "");
+      list.appendChild(up);
+    }
+    if(!r.dirs.length){
+      const e = document.createElement("div");
+      e.className = "mrow"; e.style.color = "var(--dim)";
+      e.textContent = "这里没有子文件夹";
+      list.appendChild(e);
+    }
+    r.dirs.forEach(d => {
+      const row = document.createElement("div");
+      row.className = "mrow";
+      row.innerHTML = `<span class="ico">📁</span><span>${d.name}</span>`;
+      row.onclick = () => openBrowser(d.path);
+      list.appendChild(row);
+    });
+  }catch(e){
+    alert("读取目录失败：" + e.message);
+    closeBrowser();
+  }
+}
+function chooseFolder(){
+  const target = brTarget, path = brPath;
+  closeBrowser();
+  if(target === "__project__"){ doOpenProject(path); return; }
+  if(target && path) document.getElementById(target).value = path;
+}
+async function openProject(){
+  const box = $("recentList");
+  box.innerHTML = "<div class='mrow' style='color:var(--dim)'>读取中…</div>";
+  $("recentModal").classList.add("show");
+  try{
+    const r = await api("/api/recent");
+    box.innerHTML = "";
+    if(!r.projects.length){
+      box.innerHTML = "<div class='mrow' style='color:var(--dim)'>还没有做过任何项目。先点「创建项目」，或者从磁盘选择。</div>";
+    }
+    r.projects.forEach(p=>{
+      const row = document.createElement("div");
+      row.className = "mrow";
+      row.style.alignItems = "flex-start";
+      row.innerHTML = `
+        <span class="ico">📁</span>
+        <span style="flex:1">
+          <b>${p.name || "(未命名)"}</b>
+          ${p.exists ? "" : "<span class='tag' style='color:var(--danger)'>文件夹已不存在</span>"}
+          <br><span style="color:var(--dim);font-size:12px">${p.path}</span>
+          <br><span style="color:var(--dim);font-size:11px">进度：${p.stage || "-"} · ${p.opened_at || ""}</span>
+        </span>
+        <span class="btns">
+          <button ${p.exists ? "" : "disabled"} onclick="event.stopPropagation();doOpenProject('${p.path.replace(/\\/g,"\\\\")}')">打开</button>
+          <button onclick="event.stopPropagation();removeRecent('${p.path.replace(/\\/g,"\\\\")}')">移除记录</button>
+          <button class="danger" onclick="event.stopPropagation();deleteProject('${p.path.replace(/\\/g,"\\\\")}')">删除</button>
+        </span>`;
+      box.appendChild(row);
+    });
+  }catch(e){
+    box.innerHTML = "<div class='mrow' style='color:var(--danger)'>读取失败：" + e.message + "</div>";
+  }
+}
+function closeRecent(){ $("recentModal").classList.remove("show"); }
+function browseProject(){ closeRecent(); brTarget = "__project__"; openBrowser(""); }
+async function removeRecent(path){
+  try{ await api("/api/recent/remove", {path}); openProject(); }catch(e){ alert(e.message); }
+}
+async function deleteProject(path){
+  if(!confirm("会把这个项目的文件夹一起删掉（声纹缓存、角色库全部消失），确定？")) return;
+  try{ await api("/api/project/delete", {path}); openProject(); }catch(e){ alert("删除失败：" + e.message); }
+}
+async function doOpenProject(path){
+  try{
+    await api("/api/open", {path});
+    closeRecent();
+    await refresh();
+    await afterOpen();
+  }catch(e){ alert("打开失败：" + e.message); }
+}
+async function afterOpen(){
+  const st = S.state;
+  if(!st || !st.open) return;
+  $("inDir").value = st.input_dir || "";
+  $("outDir").value = st.output_dir || "";
+  $("prjDir").value = st.path || "";
+  if(st.stage === "created") { show("s2"); return; }
+  if(st.stage === "embedded" || st.stage === "clustered"){ await loadClusters(); show("s2"); return; }
+  await loadClusters();
+  show("s4");
+}
+function closeBrowser(){
+  document.getElementById("browser").classList.remove("show");
+}
+
+/* ---------- 1 创建项目 ---------- */
+async function createProject(){
+  const body = {path:$("prjDir").value, input_dir:$("inDir").value, output_dir:$("outDir").value};
+  if(!body.input_dir||!body.output_dir||!body.path){ alert("三个路径都要填"); return; }
+  try{
+    await api("/api/project", body);
+    await refresh();
+    show("s2");
+  }catch(e){ alert("创建失败："+e.message); }
+}
+async function refresh(){
+  S.state = await api("/api/state");
+  if(S.state.open){
+    $("projName").textContent = `${S.state.name} · ${S.state.stage}`;
+    $("thr").value = S.state.params.threshold;
+    $("mrg").value = S.state.params.margin;
+  }
+  renderSteps();
+  return S.state;
+}
+
+/* ---------- 任务轮询 ---------- */
+async function poll(jid, onTick){
+  for(;;){
+    const j = await api("/api/jobs/"+jid);
+    onTick && onTick(j);
+    if(j.status==="done") return j.result;
+    if(j.status==="error") throw new Error(j.error+"\n"+(j.trace||""));
+    await new Promise(r=>setTimeout(r,600));
+  }
+}
+
+/* ---------- 2 聚类 ---------- */
+async function runCluster(){
+  const btn=$("btnCluster"); btn.disabled=true; $("log2").textContent="";
+  $("bar2").style.width="2%";
+  try{
+    const cool = $("cool2").checked;
+    await api("/api/params", {
+      workers: cool ? 2 : Math.max(1, +$("workers2").value || 4),
+      worker_threads: cool ? 1 : 2,
+      throttle_ms: cool ? 15 : 0,
+      samples_per_cluster: 20,
+    });
+    const st = await refresh();
+    if(!st.stats || !st.stats.files){
+      $("log2").textContent="扫描文件…";
+      const j = await api("/api/scan", {});
+      await poll(j.job, j=>{ $("log2").textContent = "扫描：" + (j.message||""); });
+      await refresh();
+    }
+    $("bar2").style.width="8%";
+    $("log2").textContent="提取声纹…";
+    {
+      const j = await api("/api/embed", {});
+      await poll(j.job, j=>{
+        const pct = j.percent || 0;
+        $("bar2").style.width = (8 + pct * 0.77) + "%";
+        $("log2").textContent = "声纹：" + pct + "%  " + (j.message||"");
+      });
+      await refresh();
+    }
+    const hasLib = await refreshLib();
+    if(hasLib){
+      $("bar2").style.width="100%";
+      $("log2").textContent = "已有角色库，跳过聚类。正在进入分类…";
+      setTimeout(()=>show("s3"), 900);
+      btn.disabled=false;
+      return;
+    }
+    $("bar2").style.width="85%";
+    $("log2").textContent="聚类…";
+    const j2 = await api("/api/cluster",{sample_size:+$("sampleSize").value, k:+$("kClusters").value});
+    const res = await poll(j2.job, j=>{ $("log2").textContent = "聚类：" + (j.message||""); });
+    await loadClusters();
+    $("bar2").style.width="100%";
+    $("log2").textContent = `完成：${res.clusters.length} 个簇（抽样 ${res.sample_size} 条）`;
+  }catch(e){
+    $("log2").textContent = "失败：" + String(e.message||e).split("\n")[0];
+    $("bar2").style.width="0";
+  }
+  btn.disabled=false;
+}
+async function loadClusters(){
+  try{ S.clusters = await api("/api/clusters"); }catch(e){ return; }
+  const box=$("clusterBox"); box.style.display="block";
+  const list=$("clusterList"); list.innerHTML="";
+  S.clusters.clusters.forEach(c=>{
+    const d=document.createElement("div"); d.className="cl";
+    d.innerHTML = `<h4>cluster ${String(c.id).padStart(2,"0")}</h4>
+      <div class="meta">${c.size} 条 · 占样本 ${(c.share*100).toFixed(1)}%</div>`;
+    c.clips.forEach(cl=>{
+      const a=document.createElement("audio");
+      a.controls=true; a.preload="metadata";
+      a.src=`/api/cluster-sample/${c.id}/${encodeURIComponent(cl.name)}`;
+      a.onplay=()=>pauseOthers(a);
+      const cap=document.createElement("div");
+      cap.className="meta"; cap.style.margin="0 0 4px";
+      cap.textContent = (cl.dur || 0) + " 秒";
+      d.appendChild(a); d.appendChild(cap);
+    });
+    const inp=document.createElement("input");
+    inp.type="text"; inp.placeholder="角色名（留空=不需要）"; inp.dataset.cid=c.id;
+    inp.value = c.name||"";
+    d.appendChild(inp);
+    list.appendChild(d);
+  });
+}
+function batchRename(){
+  const v=$("batchName").value;
+  document.querySelectorAll("#clusterList input[data-cid]").forEach(i=>i.value=v);
+}
+async function buildLibrary(){
+  const assignment={};
+  document.querySelectorAll("#clusterList input[data-cid]").forEach(i=>{
+    if(i.value.trim()) assignment[i.dataset.cid]=i.value.trim();
+  });
+  if(!Object.keys(assignment).length){ alert("至少给一个簇起名"); return; }
+  try{
+    const r = await api("/api/build",{assignment});
+    alert("角色库已建立：\n" + r.characters.map(c=>`${c.name}（样本 ${c.size} 条）`).join("\n"));
+    await refresh(); show("s3");
+  }catch(e){ alert("失败："+e.message); }
+}
+
+/* ---------- 3 分类 ---------- */
+async function refreshCalib(){
+  const btn = $("autoCalBtn4"), hint = $("calibHint4"), stat = $("markStat");
+  if(!btn) return;
+  try{
+    const r = await api("/api/calibrate", {});
+    const pos = r.pos || 0, neg = r.neg || 0;
+    if(stat) stat.innerHTML = `已确认 <b style="color:var(--ok)">${pos}</b> 条 · 已否定 <b style="color:var(--danger)">${neg}</b> 条`;
+    if(r.ok){
+      btn.disabled = false;
+      btn.textContent = "自动校准（建议阈值 " + r.threshold + "）";
+      hint.textContent = "点校准会用你的判断反推阈值，然后重新分类。";
+    }else{
+      btn.disabled = true;
+      btn.textContent = "自动校准";
+      hint.textContent = (r.reason || "标记还不够") + "（各满 3 条就能校准）";
+    }
+  }catch(e){ btn.disabled = true; if(stat) stat.textContent = ""; hint.textContent = ""; }
+}
+function finishReview(){ show("s5"); }
+async function calibrate(){
+  try{
+    const r = await api("/api/calibrate", {});
+    if(!r.ok){ alert(r.reason || "样本不足"); return; }
+    const msg = `建议阈值 ${r.threshold}，margin ${r.margin}\n`
+      + `（确认 ${r.pos} 条，最低 10% 分位 ${r.pos_p10}；否定 ${r.neg} 条，最高 90% 分位 ${r.neg_p90}）\n`
+      + (r.separable ? "两组可分开，建议可信。" : "两组有重叠，阈值只能折中。")
+      + "\n\n要应用吗？";
+    if(!confirm(msg)) return;
+    const res = await api("/api/threshold", {threshold:r.threshold, margin:r.margin});
+    $("thr").value = r.threshold; $("mrg").value = r.margin;
+    await refresh();
+    await loadReview(true);
+    await refreshCalib();
+    alert("阈值已更新为 " + r.threshold + "，重新分类完成。\n\n" +
+          Object.entries(res.counts).map(([k,v])=>k+" "+v).join("  "));
+  }catch(e){ alert("校准失败："+e.message); }
+}
+
+async function loadSystemInfo(){
+  try{
+    const s = await api("/api/system");
+    const w = $("workers2");
+    if(!w) return;
+    w.min = s.min_workers; w.max = s.max_workers;
+    w.value = s.recommended_workers;
+    $("workersLabel").innerHTML = `并发进程数（${s.logical_cpus} 线程，推荐 ${s.recommended_workers}，可填 ${s.min_workers}~${s.max_workers}）`;
+  }catch(e){}
+}
+async function refreshLib(){
+  const el = $("libStatus");
+  if(!el) return false;
+  try{
+    const lib = await api("/api/characters");
+    const has = !!(lib && lib.characters && lib.characters.length);
+    el.innerHTML = has
+      ? "当前角色库：<b>" + lib.characters.map(c=>c.name).join("、") + "</b>"
+      : "当前还没有角色库";
+    return has;
+  }catch(e){ el.textContent = ""; return false; }
+}
+async function exportLib(){ window.location = "/api/characters/export"; }
+function importLib(){
+  const f = document.createElement("input");
+  f.type = "file"; f.accept = ".json,application/json";
+  f.onchange = async () => {
+    if(!f.files.length) return;
+    try{
+      const content = await f.files[0].text();
+      const r = await api("/api/characters/import", {content});
+      await refresh();
+      const hasLib = await refreshLib();
+      const st = S.state || {};
+      const hasEmb = !!(st.stats && st.stats.embedded);
+      if(!hasEmb){
+        const h = $("libHint");
+        h.style.display = "block";
+        h.innerHTML = `已导入角色库（${r.characters.join("、")}），但本项目还没有声纹。`
+          + `<button class="primary" style="margin-left:8px" onclick="runCluster()">立即提取声纹</button>`;
+        alert("角色库已导入：" + r.characters.join("、") + "\n\n这个项目还没有声纹，需要先提取一次（约几分钟），之后才能分类。");
+      }else{
+        $("libHint").style.display = "none";
+        alert("角色库已导入：" + r.characters.join("、") + "\n\n正在进入分类页。");
+        show("s3");
+      }
+    }catch(e){ alert("导入失败：" + e.message); }
+  };
+  f.click();
+}
+
+async function runClassify(){
+  const st = S.state || {};
+  if(!st.stats || !st.stats.embedded){
+    alert("还没有这个项目的声纹。\n\n请先去 ② 点「开始处理」（扫描 + 提取声纹），再回来分类。");
+    show("s2");
+    return;
+  }
+  $("log3").textContent="分类中…";
+  $("bar3").style.width="40%";
+  try{
+    await api("/api/params", {
+      min_duration: Math.max(0, +$("minDur3").value || 0),
+      max_rms: $("loud3").checked ? 0.25 : 0,
+    });
+  }catch(e){}
+  try{
+    const j = await api("/api/classify", {});
+    const counts = await poll(j.job, j=>{ $("log3").textContent=j.message || "分类中…"; });
+    $("bar3").style.width="100%";
+    $("counts3").innerHTML = Object.entries(counts)
+      .map(([k,v])=>`<span><b>${k}</b> ${v}</span>`).join("");
+    const others = counts["其他"] || 0;
+    const total = Object.values(counts).reduce((a,b)=>a+b,0);
+    $("log3").textContent = `分类完成：共 ${total} 条，其中未归类 ${others} 条。正在进入校对…`;
+    await refresh();
+    setTimeout(()=>show("s4"), 900);
+  }catch(e){ $("log3").textContent="失败："+e.message; $("bar3").style.width="0"; }
+}
+
+/* ---------- 4 校对 ---------- */
+async function loadReview(reset){
+  if(reset){ S.review=[]; S.offset=0; S.cur=-1; }
+  const order=$("sort4").value;
+  const r = await api(`/api/review?label=${encodeURIComponent(S.filter)}&offset=${S.offset}&limit=60&order=${order}`);
+  S.review = reset ? r.items : S.review.concat(r.items);
+  S.offset += r.items.length;
+  $("progress4").textContent = `已加载 ${S.review.length} / ${r.total} · 已校对 ${r.reviewed || 0} 条`;
+  renderReview(r.total);
+}
+function renderReview(total){
+  const grid=$("reviewGrid"); grid.innerHTML="";
+  S.review.forEach((it,i)=>{
+    const d=document.createElement("div"); d.className="clip"; d.dataset.i=i; d.dataset.idx=it.index;
+    d.innerHTML=`<div class="name">${it.name}</div>
+      <div><span class="tag">${it.label}</span>
+      <span class="tag">sim ${it.score}</span><span class="tag">${it.dur}s</span>
+      ${it.overridden?'<span class="tag" style="color:var(--warn)">已改</span>':''}</div>`;
+    const a=document.createElement("audio");
+    a.controls=true; a.preload="metadata"; a.src=`/api/audio/${it.index}`;
+    a.onplay=()=>{ pauseOthers(a); autoConfirm(it); };
+    d.appendChild(a);
+    const btns=document.createElement("div"); btns.className="btns";
+    const names=(S.state?.stats?.characters)||[];
+    names.forEach((n,k)=>{
+      const b=document.createElement("button");
+      b.textContent=`${k+1} ${n}`;
+      b.onclick=()=>act(it,"assign",n);
+      btns.appendChild(b);
+    });
+    const bc=document.createElement("button"); bc.textContent="✓ 确认"; bc.title="这条分对了"; bc.onclick=()=>act(it,"confirm",it.label); btns.appendChild(bc);
+    const bo=document.createElement("button"); bo.textContent="0 其他"; bo.onclick=()=>act(it,"other"); btns.appendChild(bo);
+    const bd=document.createElement("button"); bd.className="danger"; bd.textContent="D 删除"; bd.onclick=()=>act(it,"block"); btns.appendChild(bd);
+    d.appendChild(btns);
+    d.onclick=e=>{ if(e.target.tagName!=="BUTTON" && e.target.tagName!=="AUDIO"){ setCur(i); } };
+    grid.appendChild(d);
+  });
+  renderFilters();
+}
+function renderFilters(){
+  const box=$("filters4"); box.innerHTML="";
+  const labels=["", ...((S.state?.stats?.characters)||[]), "其他"];
+  labels.forEach(l=>{
+    const c=document.createElement("button");
+    c.className="chip"+(S.filter===l?" on":"");
+    c.textContent=l===""?"全部":l;
+    c.onclick=()=>{ S.filter=l; loadReview(true); };
+    box.appendChild(c);
+  });
+}
+async function autoConfirm(it){
+  if(it.overridden) return;
+  it.overridden = true;                     // 先占位，避免重复提交
+  try{
+    await api("/api/review/action", {index:it.index, action:"confirm", name:it.label});
+    if(S.state?.stats) S.state.stats.reviewed = (S.state.stats.reviewed||0)+1;
+    const card = document.querySelector(`#reviewGrid .clip[data-idx="${it.index}"]`);
+    if(card && !card.querySelector(".badge-auto")){
+      const b = document.createElement("span");
+      b.className = "tag badge-auto"; b.textContent = "已确认";
+      card.querySelector(".tag")?.parentElement?.appendChild(b);
+    }
+    refreshCalib();
+  }catch(e){ it.overridden = false; }
+}
+function setCur(i){
+  const prev = S.cur;
+  if(prev >= 0 && prev !== i && S.review[prev]){
+    const p = S.review[prev];
+    if(S.played.has(p.index) && !p.overridden){
+      api("/api/review/action", {index:p.index, action:"confirm", name:p.label}).then(()=>{
+        p.overridden = true;
+        if(S.state && S.state.stats) S.state.stats.reviewed = (S.state.stats.reviewed||0)+1;
+      }).catch(()=>{});
+    }
+  }
+  S.cur=i;
+  document.querySelectorAll("#reviewGrid .clip").forEach((c,k)=>c.classList.toggle("cur",k===i));
+  const el=document.querySelectorAll("#reviewGrid .clip")[i];
+  if(el) el.scrollIntoView({block:"nearest"});
+}
+async function act(it, action, name){
+  try{
+    await api("/api/review/action",{index:it.index, action, name:name||""});
+    if(action==="assign"||action==="confirm") it.label = name || it.label;
+    if(action==="other"||action==="block") it.label = "其他";
+    it.overridden=true;
+    if(action==="block" || action==="other") await showCascade(it);
+    // 改判/删除后若不再属于当前筛选，直接从列表移除
+    if(S.filter && it.label !== S.filter){
+      const pos = S.review.indexOf(it);
+      if(pos >= 0){ S.review.splice(pos, 1); if(S.cur >= pos) S.cur--; }
+    }
+    renderReview();
+    refreshCalib();
+  }catch(e){ alert("操作失败："+e.message); }
+}
+async function showCascade(it){
+  try{
+    const r = await api("/api/review/cascade",{index:it.index, label:it.predicted});
+    if(!r.candidates.length){
+      S.cascade = [];
+      $("cascadeList").innerHTML = `<div class="sub">没有找到相似度足够高的同类片段（阈值 0.78）。</div>`;
+      document.getElementById("delAll").style.display = "none";
+      $("cascadePanel").style.display = "block";
+      setTimeout(hideCascade, 4000);
+      return;
+    }
+    document.getElementById("delAll").style.display = "";
+    S.cascade = r.candidates;
+    const box=$("cascadeList"); box.innerHTML="";
+    r.candidates.slice(0,12).forEach((c,k)=>{
+      const d=document.createElement("div"); d.className="clip";
+      d.innerHTML=`<div class="name">${c.name}</div><div><span class="tag">sim ${c.sim}</span><span class="tag">${c.dur}s</span></div>`;
+      const a=document.createElement("audio"); a.controls=true; a.preload="metadata";
+      a.src=`/api/audio/${c.index}`; a.onplay=()=>pauseOthers(a); d.appendChild(a);
+      box.appendChild(d);
+    });
+    $("cascadePanel").style.display="block";
+  }catch(e){}
+}
+function hideCascade(){ $("cascadePanel").style.display="none"; S.cascade=[]; }
+async function blockAllCascade(){
+  for(const c of S.cascade){
+    await api("/api/review/action",{index:c.index, action:"block"});
+  }
+  hideCascade(); loadReview(true);
+}
+function pauseOthers(el){
+  document.querySelectorAll("audio").forEach(a=>{ if(a!==el) a.pause(); });
+}
+
+/* ---------- 5 导出 ---------- */
+async function estimate(){
+  try{
+    const r = await api("/api/estimate");
+    $("est5").innerHTML =
+      `<span>将导出 <b>${r.selected || 0}</b> 条</span>`
+      + `<span>WAV（原始采样率）：<b>${fmtSize(r.needed)}</b></span>`
+      + `<span>复制原文件：<b>${fmtSize(r.needed_copy || 0)}</b></span>`
+      + `<span>目标磁盘可用：<b>${fmtSize(r.free)}</b></span>`
+      + (r.needed > r.free ? `<span style="color:var(--danger)">空间不足</span>` : "");
+  }catch(e){ $("est5").textContent=""; }
+}
+async function runExport(){
+  $("log5").textContent="";
+  try{
+    $("bar5").style.width="0";
+    const j = await api("/api/export", {});
+    const st = await poll(j.job, j=>{
+      $("bar5").style.width = (j.percent || 0) + "%";
+      $("log5").textContent = "导出中 " + (j.percent || 0) + "%  " + (j.message || "");
+    });
+    $("bar5").style.width="100%";
+    $("log5").textContent = "完成：" + JSON.stringify(st.counts) + `\n其他 ${st.others} 条未导出\n清单：${st.manifest}`;
+    await refresh();
+  }catch(e){ $("log5").textContent="失败："+e.message; }
+}
+async function clean(scopes){
+  if(!confirm("确认清理？删除后不可恢复")) return;
+  try{
+    const r = await api("/api/clean",{scopes});
+    alert(`已释放 ${(r.freed/1024/1024).toFixed(1)} MB`);
+  }catch(e){ alert("失败："+e.message); }
+}
+
+async function ensureChars(){
+  if(S.state?.stats?.characters?.length) return;
+  try{
+    const lib = await api("/api/characters");
+    if(lib?.characters?.length){
+      S.state.stats = S.state.stats || {};
+      S.state.stats.characters = lib.characters.map(c=>c.name);
+    }
+  }catch(e){}
+}
+
+/* ---------- 键盘 ---------- */
+document.addEventListener("keydown", async e=>{
+  if(currentSection!=="s4" || e.target.tagName==="INPUT") return;
+  const cards=document.querySelectorAll("#reviewGrid .clip");
+  if(!cards.length) return;
+  if(e.key===" "){
+    e.preventDefault();
+    if(S.cur<0) setCur(0);
+    const a=cards[S.cur]?.querySelector("audio");
+    if(a){ a.paused? a.play():a.pause(); }
+  }else if(e.key==="ArrowRight"){ e.preventDefault(); setCur(Math.min(cards.length-1,S.cur+1)); }
+  else if(e.key==="ArrowLeft"){ e.preventDefault(); setCur(Math.max(0,S.cur-1)); }
+  else if(e.key==="d" || e.key==="D"){ if(S.cur>=0) act(S.review[S.cur],"block"); }
+  else if(e.key==="c" || e.key==="C"){ if(S.cur>=0) act(S.review[S.cur],"confirm",S.review[S.cur].label); }
+  else if(e.key==="0"){ if(S.cur>=0) act(S.review[S.cur],"other"); }
+  else if(/^[1-9]$/.test(e.key)){
+    const names=(S.state?.stats?.characters)||[];
+    const n=names[+e.key-1];
+    if(n && S.cur>=0) act(S.review[S.cur],"assign",n);
+  }
+});
+
+/* ---------- 启动 ---------- */
+(async function init(){
+  renderSteps();
+  await refresh();
+  await loadSystemInfo();
+  if(S.state?.open){ await afterOpen(); }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voicesorter"
+version = "1.1.0"
+description = "Sort voice clips by speaker identity, locally."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "numpy>=2.0",
+  "scipy>=1.13",
+  "scikit-learn>=1.5",
+  "av>=13.0",
+  "sherpa-onnx>=1.10",
+  "soundfile>=0.12",
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+  "pydantic>=2.6",
+]
+
+[project.scripts]
+voicesorter = "voicesorter.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["voicesorter*"]
+
+[tool.setuptools.package-data]
+voicesorter = ["web/*.html"]
